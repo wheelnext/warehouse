@@ -564,6 +564,14 @@ def includeme(config):
     )
 
     config.add_route(
+        "api.simple.variant.detail",
+        "/simple/{name}/variant/{variant}/",
+        factory="warehouse.packaging.models:ProjectFactory",
+        traverse="/{name}/variant/{variant}",
+        domain=warehouse,
+    )
+
+    config.add_route(
         "api.echo",
         "/danger-api/echo",
         domain=warehouse,

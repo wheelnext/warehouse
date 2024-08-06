@@ -45,13 +45,14 @@ def _simple_index(request, serial):
     }
 
 
-def _simple_detail(project, request):
+def _simple_detail(project, request, variant=None):
     # Get all of the files for this project.
     files = sorted(
         request.db.query(File)
         .options(joinedload(File.release))
         .join(Release)
         .filter(Release.project == project)
+        .filter(Release.variant == variant)
         # Exclude projects that are in the `quarantine-enter` lifecycle status.
         .join(Project)
         .filter(
