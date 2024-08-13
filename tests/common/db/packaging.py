@@ -30,6 +30,7 @@ from warehouse.packaging.models import (
     Release,
     Role,
     RoleInvitation,
+    Variant,
 )
 from warehouse.utils import readme
 
@@ -100,6 +101,16 @@ class ReleaseFactory(WarehouseFactory):
     description = factory.SubFactory(DescriptionFactory)
 
 
+class VariantFactory(WarehouseFactory):
+    class Meta:
+        model = Variant
+
+    variant_json = factory.Faker("json", data_columns=[('str_var', 'word'), ('int_var', 'pyint')], num_rows=1)
+    sha256_digest = factory.LazyAttribute(
+        lambda o: hashlib.sha256(o.variant_json.encode("utf8")).hexdigest()
+    )
+
+
 class FileFactory(WarehouseFactory):
     class Meta:
         model = File
@@ -139,6 +150,7 @@ class FileFactory(WarehouseFactory):
             ]
         )
     )
+    variant = None
 
 
 class FileEventFactory(WarehouseFactory):
