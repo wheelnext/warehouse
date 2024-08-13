@@ -14,11 +14,12 @@ import hashlib
 import tempfile
 
 import pretend
+import pytest
 
 from warehouse.packaging.interfaces import ISimpleStorage
 from warehouse.packaging.utils import _simple_detail, render_simple_detail
 
-from ...common.db.packaging import FileFactory, ProjectFactory, ReleaseFactory
+from ...common.db.packaging import FileFactory, ProjectFactory, ReleaseFactory, VariantFactory
 
 
 def test_simple_detail_empty_string(db_request):
@@ -32,7 +33,8 @@ def test_simple_detail_empty_string(db_request):
     assert expected_content["files"][0]["requires-python"] is None
 
 
-def test_render_simple_detail(db_request, monkeypatch, jinja):
+@pytest.mark.parametrize("variant", [True, False])
+def test_render_simple_detail(db_request, monkeypatch, jinja, variant):
     project = ProjectFactory.create()
     release1 = ReleaseFactory.create(project=project, version="1.0")
     release2 = ReleaseFactory.create(project=project, version="dog")
@@ -40,6 +42,10 @@ def test_render_simple_detail(db_request, monkeypatch, jinja):
     FileFactory.create(
         release=release2, metadata_file_sha256_digest="beefdeadbeefdeadbeefdeadbeefdead"
     )
+    if variant:
+        variant1 = VariantFactory.create() if variant else None
+        FileFactory.create(release=release1,
+                           variant=variant1)
 
     fake_hasher = pretend.stub(
         update=pretend.call_recorder(lambda x: None),
@@ -51,8 +57,12 @@ def test_render_simple_detail(db_request, monkeypatch, jinja):
     db_request.route_url = lambda *a, **kw: "the-url"
     template = jinja.get_template("templates/api/simple/detail.html")
     expected_content = template.render(
-        **_simple_detail(project, db_request), request=db_request
+        **_simple_detail(project, db_request,
+                         variant=variant1.sha256_digest if variant else None
+                         ), request=db_request
     ).encode("utf-8")
+
+    print(expected_content)
 
     content_hash, path = render_simple_detail(project, db_request)
 

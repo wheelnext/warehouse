@@ -746,6 +746,9 @@ class Release(HasObservations, db.Model):
             return False
         return all(file.uploaded_via_trusted_publisher for file in files)
 
+    @property
+    def variants(self):
+        return set(variant.sha256_digest for variant in self.files.all().values("variant"))
 
 class PackageType(str, enum.Enum):
     bdist_dmg = "bdist_dmg"
@@ -785,6 +788,7 @@ class File(HasEvents, db.Model):
         ForeignKey("releases.id", onupdate="CASCADE", ondelete="CASCADE"),
     )
     release: Mapped[Release] = orm.relationship(back_populates="files")
+
     python_version: Mapped[str]
     requires_python: Mapped[str | None]
     packagetype: Mapped[PackageType] = mapped_column()
@@ -817,6 +821,12 @@ class File(HasEvents, db.Model):
         nullable=True,
         comment="If True, the metadata for the file cannot be backfilled.",
     )
+
+    # PEP XYZ (TBD) - extended metadata, referenced by hash
+    variant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("variants.id", onupdate="CASCADE", ondelete="CASCADE"),
+    )
+    variant: Mapped[Variant | None] = orm.relationship(back_populates="files")
 
     @property
     def uploaded_via_trusted_publisher(self) -> bool:
@@ -976,3 +986,20 @@ class ProjectMacaroonWarningAssociation(db.Model):
         ForeignKey("projects.id", onupdate="CASCADE", ondelete="CASCADE"),
         primary_key=True,
     )
+
+
+class Variant(db.Model):
+    __tablename__ = "variants"
+    __table_args__ = (
+        CheckConstraint("sha256_digest ~* '^[A-F0-9]{64}$'"),
+        Index("variant_idx", "sha256_digest"),
+    )
+    __repr__ = make_repr("sha256_digest", "variant_json")
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # TODO: does it make sense to have the digest as a primary key?
+    sha256_digest: Mapped[str]
+    # TODO: if people want to search by particular variant key/value, should we have the JSON broken out
+    # into its own table?
+    variant_json: Mapped[str]  # TODO: validate JSON with regex above?
+    files: Mapped[list[File]] = orm.relationship(back_populates="variant")

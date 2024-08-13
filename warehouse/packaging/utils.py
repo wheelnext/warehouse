@@ -11,6 +11,7 @@
 # limitations under the License.
 
 import hashlib
+import json
 import os.path
 import tempfile
 
@@ -20,7 +21,7 @@ from pyramid_jinja2 import IJinja2Environment
 from sqlalchemy.orm import joinedload
 
 from warehouse.packaging.interfaces import ISimpleStorage
-from warehouse.packaging.models import File, LifecycleStatus, Project, Release
+from warehouse.packaging.models import File, LifecycleStatus, Project, Release, Variant
 
 API_VERSION = "1.1"
 
@@ -45,13 +46,22 @@ def _simple_index(request, serial):
     }
 
 
-def _simple_detail(project, request):
+def _simple_detail(project, request, variant=None):
     # Get all of the files for this project.
+    filters = [
+        Release.project == project,
+    ]
+    if variant:
+        # todo: match substring of sha256_digest for shortened variant hash
+        # TODO: raise 404 if variant is not found?
+        filters.append(Variant.sha256_digest.startswith(variant))
     files = sorted(
         request.db.query(File)
         .options(joinedload(File.release))
+        .options(joinedload(File.variant))
         .join(Release)
-        .filter(Release.project == project)
+        .join(Variant)
+        .filter(*filters)
         # Exclude projects that are in the `quarantine-enter` lifecycle status.
         .join(Project)
         .filter(
@@ -64,10 +74,14 @@ def _simple_detail(project, request):
         {f.release.version for f in files}, key=packaging_legacy.version.parse
     )
 
+    variant = files[0].variant if len(files) > 0 else None
+
     return {
         "meta": {"api-version": API_VERSION, "_last-serial": project.last_serial},
         "name": project.normalized_name,
         "versions": versions,
+        "variant_hash": variant.sha256_digest if variant else None,
+        "variant_value": json.loads(variant.variant_json) if variant else None,
         "files": [
             {
                 "filename": file.filename,
